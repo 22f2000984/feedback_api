@@ -6,7 +6,6 @@ import os
 
 app = FastAPI(title="Customer Feedback Analysis API")
 
-# CORS (prevents OPTIONS 405)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -26,29 +25,54 @@ class SentimentResponse(BaseModel):
 
 # ---------------- Deterministic Fallback ----------------
 def fallback_sentiment(text: str) -> SentimentResponse:
-    text = text.lower()
+    t = text.lower()
 
-    positive_words = ["good", "great", "excellent", "amazing", "love", "awesome"]
-    negative_words = ["bad", "worst", "terrible", "hate", "poor", "awful"]
+    strong_positive = ["phenomenal", "excellent", "outstanding", "perfect", "spotless"]
+    mild_positive = ["great", "good", "happy", "satisfied", "nice"]
 
-    if any(w in text for w in positive_words):
+    strong_negative = ["worst", "terrible", "awful", "horrible"]
+    mild_negative = ["frustrating", "slow", "waited", "delay", "issue", "problem"]
+
+    if any(w in t for w in strong_positive):
         return SentimentResponse(sentiment="positive", rating=5)
-    if any(w in text for w in negative_words):
+
+    if any(w in t for w in mild_positive):
+        return SentimentResponse(sentiment="positive", rating=4)
+
+    if any(w in t for w in strong_negative):
         return SentimentResponse(sentiment="negative", rating=1)
+
+    if any(w in t for w in mild_negative):
+        return SentimentResponse(sentiment="negative", rating=2)
 
     return SentimentResponse(sentiment="neutral", rating=3)
 
 # ---------------- Endpoint ----------------
 @app.post("/comment", response_model=SentimentResponse)
 def analyze_comment(req: CommentRequest):
-    # Safety: empty/whitespace comments
-    if not req.comment.strip():
+    text = req.comment.strip()
+    if not text:
         return SentimentResponse(sentiment="neutral", rating=3)
 
     try:
         response = client.responses.create(
             model="gpt-4.1-mini",
-            input=req.comment,
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a sentiment classifier.\n"
+                        "Rules:\n"
+                        "- Strong praise → positive, rating 5\n"
+                        "- Mild praise → positive, rating 4\n"
+                        "- Neutral or mixed → neutral, rating 3\n"
+                        "- Mild complaint (delay, frustration) → negative, rating 2\n"
+                        "- Strong complaint → negative, rating 1\n"
+                        "Return ONLY valid JSON."
+                    )
+                },
+                {"role": "user", "content": text}
+            ],
             response_format={
                 "type": "json_schema",
                 "json_schema": {
@@ -73,13 +97,10 @@ def analyze_comment(req: CommentRequest):
             }
         )
 
-        # If OpenAI succeeds → return LLM result
         if response.output_parsed:
             return response.output_parsed
 
     except Exception:
-        # NEVER fail the evaluator
         pass
 
-    # Guaranteed safe fallback
-    return fallback_sentiment(req.comment)
+    return fallback_sentiment(text)

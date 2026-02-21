@@ -5,7 +5,7 @@ import os
 
 app = FastAPI(title="Customer Feedback Analysis API")
 
-client = OpenAI(api_key=os.getenv("eyJhbGciOiJIUzI1NiJ9.eyJlbWFpbCI6IjIyZjIwMDA5ODRAZHMuc3R1ZHkuaWl0bS5hYy5pbiJ9.G7srIOp35q_kYBkoQ9D4CusHekbXlHbCvsP4YiuaoRM"))
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 # ---------- Request & Response Models ----------
 
